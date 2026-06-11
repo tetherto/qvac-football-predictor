@@ -156,9 +156,15 @@ export async function predictNations({ modelId, teamA, teamB, onEvent, tone }) {
 // line is validated against ITS source fact; if the small model invents or mangles one,
 // the caller falls back to the plain computed facts.
 export async function funFactsRewrite({ modelId, facts }) {
-  const sys = `You punch up football tournament facts for a broadcast graphics card. Rewrite each fact as one fun, confident, slightly cheeky line. Keep EVERY number and every team name EXACTLY as given. Same order, one line per fact, no new facts, no hashtags, no emoji. Answer with ONLY a JSON array of strings.
+  const sys = `You punch up football tournament facts for a broadcast graphics card. Rewrite each fact as one fun, confident, slightly cheeky line.
+Hard rules:
+- Keep EVERY number and every team name EXACTLY as given. Same order, one line per fact, no new facts, no hashtags, no emoji.
+- Do NOT invent relationships, rivalries, history, nicknames or anything that is not already in the fact.
+- Do NOT change what a fact claims. Only the tone changes: "won at least once" must still mean won at least once.
+- Every line must end differently. Never reuse a punchline or closing phrase, and do not copy the example's wording.
+Answer with ONLY a JSON array of strings.
 Example input: ["Spain won 510 of 5,000 simulations."]
-Example answer: ["Spain lifted the trophy in 510 of 5,000 universes. Book the parade?"]`;
+Example answer: ["Spain lifted the trophy in 510 of 5,000 universes. Somebody warm up the bus."]`;
   const history = [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(facts) }];
   const noopTool = [{ name: "noop", description: "Do not call this. Internal placeholder only.", parameters: z.object({}) }];
   const r = await turn({ modelId, history, kvCache: false, onEvent: null, tools: noopTool });

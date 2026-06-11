@@ -60,6 +60,7 @@
   .sb-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#070d0b;padding:6px 26px;transform:skewX(-10deg);border-bottom:4px solid var(--gold);min-width:170px}
   .sb-mid>div{transform:skewX(10deg)}
   .sb-score{font-family:var(--disp);font-size:40px;line-height:1;letter-spacing:2px}
+  .sb-score.wait{animation:waitpulse 1.6s ease-in-out infinite} @keyframes waitpulse{50%{opacity:.4}}
   .sb-score.pop{animation:scorepop .55s cubic-bezier(.2,1.6,.4,1)}
   @keyframes scorepop{0%{transform:skewX(10deg) scale(1)}35%{transform:skewX(10deg) scale(1.45);color:var(--gold)}100%{transform:skewX(10deg) scale(1)}}
   .sb-min{font-family:var(--mono);font-size:12px;color:var(--gold);font-weight:700;margin-top:2px;letter-spacing:1px}
@@ -116,7 +117,10 @@
   .dist .c{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
   .dist .bar{width:80%;border-radius:4px 4px 0 0;min-height:2px;transition:height .5s} .dist .pct{font-family:var(--mono);font-size:8.5px;color:var(--bright);height:10px} .dist .lab{font-family:var(--mono);font-size:8.5px;color:var(--dim);margin-top:2px}
   .distaxis{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dim);margin-top:3px}
-  .dotgrid{display:grid;grid-template-columns:repeat(25,1fr);gap:3px;margin-bottom:8px} .dotgrid span{aspect-ratio:1;border-radius:50%;display:block}
+  .dotgrid{display:grid;grid-template-columns:repeat(20,1fr);gap:3px;margin-bottom:4px} .dotgrid span{aspect-ratio:1;border-radius:50%;display:block}
+  .statsgrid{display:grid;grid-template-columns:1.1fr 1.2fr 1fr;gap:20px;align-items:start}
+  @media(max-width:860px){.statsgrid{grid-template-columns:1fr}}
+  .scell h5{margin:0 0 7px;font-size:9.5px;font-family:var(--mono);color:var(--accent);letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
 
   /* ---------- matches tab ---------- */
   .ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:9px}
@@ -161,7 +165,7 @@
   #fx{position:fixed;inset:0;z-index:60;pointer-events:none}
   #confettiC{position:fixed;inset:0;z-index:59;pointer-events:none}
   .ovl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
-  .ovl .shade{position:absolute;inset:0;background:radial-gradient(80% 60% at 50% 50%, rgba(0,0,0,.55), rgba(0,0,0,.18));animation:fadein .25s}
+  .ovl .shade{position:absolute;inset:0;background:radial-gradient(85% 70% at 50% 50%, rgba(3,7,6,.92), rgba(3,7,6,.62));backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);animation:fadein .25s}
   @keyframes fadein{from{opacity:0}to{opacity:1}}
   .ban{position:relative;text-align:center;transform:skewX(-8deg);animation:slam .42s cubic-bezier(.18,1.5,.32,1)}
   @keyframes slam{0%{transform:skewX(-8deg) scale(2.6);opacity:0}60%{transform:skewX(-8deg) scale(.96);opacity:1}100%{transform:skewX(-8deg) scale(1)}}
@@ -177,6 +181,7 @@
   @keyframes cardtilt{0%{transform:rotate(-40deg) translateY(-120px);opacity:0}100%{transform:rotate(6deg);opacity:1}}
   .ban.ftban .b1{color:var(--gold)}
   .ban.champban .b1{color:var(--gold);text-shadow:0 6px 0 rgba(0,0,0,.35),0 0 80px rgba(255,216,77,.9)}
+  .ban.minor .b1{font-size:clamp(36px,5.5vw,72px)}
   @media (prefers-reduced-motion: reduce){ .ban,.ovl .shade,.champ::after{animation:none!important} #confettiC{display:none} }
 
   footer{text-align:center;color:var(--dim);font-size:11.5px;margin-top:16px}
@@ -205,7 +210,7 @@
         <button class="go" id="goMatch">Predict match</button>
         <button class="go alt" id="goCup">🎲 Simulate the whole tournament</button>
       </div>
-      <div class="status" id="status">Pick two teams (✓ = full squad data, funniest results), or simulate the whole thing.</div>
+      <div class="status" id="status">Pick two teams and watch the most likely result play out, or simulate the whole thing.</div>
     </div>
 
     <!-- match result -->
@@ -227,14 +232,12 @@
         </div>
         <div class="rightcol">
           <div class="panel"><h3>🎙️ The pundit's read</h3><div class="pundit wait" id="pundit">The pundit is watching the match...</div></div>
-          <div class="panel">
-            <h3>📊 Statistical analysis</h3>
-            <div class="muted simnote">These odds come from playing this match <b>10,000 times</b> (a Monte Carlo simulation), not one guess.</div>
-            <div class="hlhead">🤖 the AI's read of the numbers</div>
-            <ul class="hl" id="highlights"><li class="muted">at the final whistle...</li></ul>
-            <div id="stats" class="muted">simulating...</div>
-          </div>
+          <div class="panel"><h3>🤖 The AI's read of the numbers</h3><ul class="hl" id="highlights"><li class="muted">at the final whistle...</li></ul></div>
         </div>
+      </div>
+      <div class="panel" id="statsPanel" style="margin-top:12px">
+        <h3>📊 Statistical analysis <span class="muted">these odds come from playing this match 10,000 times (a Monte Carlo simulation), not one guess</span></h3>
+        <div id="stats" class="muted">simulating...</div>
       </div>
     </div>
 
@@ -353,13 +356,13 @@ async function loadSchedule(){
   try{ const d=await fetch("/api/schedule").then((r)=>r.json()); SCHED=d.schedule; GROUPS=d.groups; KNOCK=d.knockout; CACHED=new Set(d.cached||[]); }
   catch(e){ $("status").textContent="Could not load fixtures: "+e.message; return; }
   const all=[...new Set(Object.values(GROUPS).flat())].sort((a,b)=>((CACHED.has(b)?1:0)-(CACHED.has(a)?1:0))||a.localeCompare(b));
-  const opts=all.map((t)=>`<option value="${esc(t)}">${flag(t)} ${esc(t)}${CACHED.has(t)?" ✓":""}</option>`).join("");
+  const opts=all.map((t)=>`<option value="${esc(t)}">${flag(t)} ${esc(t)}</option>`).join("");
   $("selA").innerHTML=opts; $("selB").innerHTML=opts;
   const cd=all.filter((t)=>CACHED.has(t)); if(cd.length>=2){ $("selA").value=cd[0]; $("selB").value=cd[1]; }
   renderGroups(); renderBracket();
 }
 function renderGroups(){
-  $("groups").innerHTML=Object.keys(GROUPS).sort().map((L)=>`<div class="gcard"><h4>Group ${L}</h4>${GROUPS[L].map((t,i)=>`<div class="gt" data-team="${esc(t)}"><span class="gp">${i+1}</span><span class="fl">${flag(t)}</span> ${esc(t)}${CACHED.has(t)?' <span style="color:var(--accent)">✓</span>':''}</div>`).join("")}</div>`).join("");
+  $("groups").innerHTML=Object.keys(GROUPS).sort().map((L)=>`<div class="gcard"><h4>Group ${L}</h4>${GROUPS[L].map((t,i)=>`<div class="gt" data-team="${esc(t)}"><span class="gp">${i+1}</span><span class="fl">${flag(t)}</span> ${esc(t)}</div>`).join("")}</div>`).join("");
   $("groups").querySelectorAll(".gt").forEach((el)=>el.addEventListener("click",()=>{ const t=el.dataset.team; const grp=Object.values(GROUPS).find((g)=>g.includes(t)); const opp=grp.find((x)=>x!==t); pickAndPredict(t,opp); }));
 }
 // Interactive bracket: tap a team to advance it; winners cascade into the next round.
@@ -392,7 +395,7 @@ function renderBracket(){
       const A=resolveSlot(m.a),B=resolveSlot(m.b),pick=bracketPicks[m.num];
       const row=(t,slot)=> (t&&isTeam(t)) ? `<div class="bteam pickable ${pick===t?'picked':''}" data-num="${m.num}" data-team="${esc(t)}"><span class="bf">${flag(t)}</span><span class="bn">${esc(t)}</span></div>`
         : `<div class="bteam tbd"><span class="bf">•</span><span class="bn">${esc(t||(String(slot)[0]==="3"?"3rd place":"TBD"))}</span></div>`;
-      return `<div class="bmatch${ri>0?" fed":""}" style="top:${(off+j*pitch).toFixed(0)}px"><div class="bm">M${m.num}</div>${row(A,m.a)}${row(B,m.b)}</div>`;
+      return `<div class="bmatch${ri>0?" fed":""}" style="top:${(off+j*pitch).toFixed(0)}px">${row(A,m.a)}${row(B,m.b)}</div>`;
     }).join("")+`</div></div>`; });
   const champ=bracketPicks[104];
   html+=`<div class="bcol"><h4>&nbsp;</h4><div class="bcol-body champ-col" style="height:${H}px"><div class="champbox"><div class="ct">★ YOUR CHAMPION ★</div><div class="cn">${champ?flag(champ)+" "+esc(champ):"TBD"}</div></div></div></div>`;
@@ -454,15 +457,12 @@ function onSimulation(s){
     playMatch({a,b});
   });
 }
+// Pre-match beat: the score does NOT move before kick-off (it spoiled/confused), it just
+// pulses "? : ?" while the sims spin, then the kick-off sequence takes over.
 function teaseScorelines(lines,doneCb){
-  const opts=(lines.length?lines:[{score:"1-1"},{score:"2-1"},{score:"1-0"}]).slice(0,6);
-  sbTag("THE SIMS ARE ROLLING..."); sbMinute("10,000 universes");
-  let n=0; const N=6;
-  const iv=setInterval(()=>{
-    const o=opts[Math.floor(Math.random()*opts.length)], [x,y]=o.score.split("-");
-    sbSet(x,y);
-    if(++n>=N){ clearInterval(iv); sbSet("0","0"); doneCb(); }
-  },300);
+  sbTag("THE SIMS ARE ROLLING..."); sbMinute("10,000 universes spinning");
+  sbSet("?","?"); $("sbScore").classList.add("wait");
+  setTimeout(doneCb,1100);
 }
 function confLabel(s,w){ const p=w==="A"?s.win_prob_a:w==="B"?s.win_prob_b:s.draw_prob; return p>=0.55?"high":p>=0.4?"medium":"low"; }
 function lockVerdict(a,b){
@@ -492,15 +492,18 @@ function renderStats(s){
   const na=pa,nd=pd,nb=Math.max(0,100-na-nd);
   const dots=[...Array(na).fill("var(--accent)"),...Array(nd).fill("#5b6b66"),...Array(nb).fill("var(--amber)")];
   $("stats").className="";
-  $("stats").innerHTML=
-    `<div class="wdl"><div class="a" style="width:${pa}%">${pa>8?pa+"%":""}</div><div class="d" style="width:${pd}%">${pd>8?pd+"%":""}</div><div class="b" style="width:${pb}%">${pb>8?pb+"%":""}</div></div>`+
-    `<div class="wdl-leg"><span style="color:var(--accent)">${esc(teamA)} ${pa}%</span><span>draw ${pd}%</span><span style="color:var(--amber)">${esc(teamB)} ${pb}%</span></div>`+
-    `<div class="muted" style="font-size:11px;margin:2px 0 3px">100 simulations, one dot each (${na} ${esc(teamA)} &middot; ${nd} draw &middot; ${nb} ${esc(teamB)})</div>`+
-    `<div class="dotgrid">`+dots.map((c)=>`<span style="background:${c}"></span>`).join("")+`</div>`+
-    `<div class="xg">expected goals: <b>${s.expected_goals_a}</b> - <b>${s.expected_goals_b}</b></div>`+
-    `<div class="muted" style="margin-bottom:2px;font-size:11px">how it is likely to be won (goal margin)</div>`+
-    `<div class="dist">`+bk.map(([k,lab,side])=>{const p=mg[k]||0;return `<div class="c"><span class="pct">${p>=.03?Math.round(p*100)+"%":""}</span><div class="bar" style="height:${Math.round(p/maxM*100)}%;background:${col[side]}"></div><span class="lab">${lab}</span></div>`;}).join("")+`</div>`+
-    `<div class="distaxis"><span style="color:var(--accent)">← ${esc(teamA)}</span><span>draw</span><span style="color:var(--amber)">${esc(teamB)} →</span></div>`;
+  $("stats").innerHTML=`<div class="statsgrid">`+
+    `<div class="scell"><h5>Who wins</h5>`+
+      `<div class="wdl"><div class="a" style="width:${pa}%">${pa>8?pa+"%":""}</div><div class="d" style="width:${pd}%">${pd>8?pd+"%":""}</div><div class="b" style="width:${pb}%">${pb>8?pb+"%":""}</div></div>`+
+      `<div class="wdl-leg"><span style="color:var(--accent)">${esc(teamA)} ${pa}%</span><span>draw ${pd}%</span><span style="color:var(--amber)">${esc(teamB)} ${pb}%</span></div>`+
+      `<div class="xg">expected goals: <b>${s.expected_goals_a}</b> - <b>${s.expected_goals_b}</b></div></div>`+
+    `<div class="scell"><h5>100 simulations, one dot each</h5>`+
+      `<div class="dotgrid">`+dots.map((c)=>`<span style="background:${c}"></span>`).join("")+`</div>`+
+      `<div class="muted" style="font-size:11px">${na} ${esc(teamA)} &middot; ${nd} draw &middot; ${nb} ${esc(teamB)}</div></div>`+
+    `<div class="scell"><h5>How it is likely to be won (goal margin)</h5>`+
+      `<div class="dist">`+bk.map(([k,lab,side])=>{const p=mg[k]||0;return `<div class="c"><span class="pct">${p>=.03?Math.round(p*100)+"%":""}</span><div class="bar" style="height:${Math.round(p/maxM*100)}%;background:${col[side]}"></div><span class="lab">${lab}</span></div>`;}).join("")+`</div>`+
+      `<div class="distaxis"><span style="color:var(--accent)">← ${esc(teamA)}</span><span>draw</span><span style="color:var(--amber)">${esc(teamB)} →</span></div></div>`+
+  `</div>`;
 }
 
 /* ============ PLAYTHROUGH ============ */
@@ -531,6 +534,7 @@ function ballToRandom(){ const side=Math.random()<0.5?"A":"B"; const i=1+Math.fl
 function ballToGoal(team){ ballEl.style.left=(team==="A"?97:3)+"%"; ballEl.style.top="50%"; }
 function playMatch({a,b}){
   timers.forEach(clearInterval); timers=[]; renderPitch();
+  $("sbScore").classList.remove("wait"); sbSet(0,0);
   sbTag("LIVE SIMULATION",true); sbMinute("1'");
   feed('<span class="m">1\'</span><span class="ic">🔔</span><span>Kick-off! Here we go.</span>');
   const events=buildEvents(a,b); let ca=0,cb=0,shown=0; const DUR=14500,start=performance.now();
@@ -551,14 +555,22 @@ function playMatch({a,b}){
       overlay(`<div class="ban goalban" style="--c:${tcol(e.team)}"><div class="b1">GOOOAL!</div><div class="b2"><span class="fl">${tflag(e.team)}</span> ${who} &middot; ${e.min}' &middot; ${tname(e.team)} ${e.pen?"(penalty)":""}</div></div>`,1500);
       feed(`<span class="m">${e.min}'</span><span class="ic">⚽</span><span>GOAL! <b>${who}</b> (${tname(e.team)})${e.pen?' <span style="color:var(--gold)">[penalty]</span>':''} &middot; now ${ca}-${cb}</span>`,"goal");
     }
-    else if(e.type==="yellow"){ feed(`<span class="m">${e.min}'</span><span class="ic">🟨</span><span>Yellow card, ${tname(e.team)}.</span>`); }
+    else if(e.type==="yellow"){
+      SND.whistle(2);
+      overlay(`<div class="ban minor"><div><span class="cardrect yellow"></span></div><div class="b1" style="color:#FFE34D">YELLOW CARD</div><div class="b2"><span class="fl">${tflag(e.team)}</span> ${tname(e.team)} &middot; ${e.min}'</div></div>`,1150);
+      feed(`<span class="m">${e.min}'</span><span class="ic">🟨</span><span>Yellow card, ${tname(e.team)}.</span>`);
+    }
     else if(e.type==="red"){
       SND.ooh();
       overlay(`<div class="ban redban"><div><span class="cardrect"></span></div><div class="b1">RED CARD!</div><div class="b2"><span class="fl">${tflag(e.team)}</span> ${tname(e.team)} down to ten</div></div>`,1500);
       const outfield=plEls[e.team].filter((d,i)=>i>0&&!d.classList.contains("off")); if(outfield.length) outfield[outfield.length-1].classList.add("off");
       feed(`<span class="m">${e.min}'</span><span class="ic">🟥</span><span>RED CARD! ${tname(e.team)} down to ten.</span>`,"red");
     }
-    else if(e.type==="sub"){ feed(`<span class="m">${e.min}'</span><span class="ic">🔄</span><span>Substitution, fresh legs for ${tname(e.team)}.</span>`); }
+    else if(e.type==="sub"){
+      SND.whistle(1);
+      overlay(`<div class="ban minor"><div class="b1" style="color:#7FD8C0">SUBSTITUTION</div><div class="b2"><span class="fl">${tflag(e.team)}</span> fresh legs for ${tname(e.team)} &middot; ${e.min}'</div></div>`,1100);
+      feed(`<span class="m">${e.min}'</span><span class="ic">🔄</span><span>Substitution, fresh legs for ${tname(e.team)}.</span>`);
+    }
   }
   function finish(){
     timers.forEach(clearInterval); timers=[]; $("clock").textContent="FT"; sbMinute("FT"); ballEl.style.left="50%"; ballEl.style.top="50%";

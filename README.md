@@ -67,6 +67,12 @@ This is a demo of local AI orchestration on real data, not betting advice.
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE).
+The code is licensed under **Apache 2.0**. See [LICENSE](LICENSE).
 
-Football data comes from public sources (an open fixtures dataset and, optionally, the API-Football service under your own key and their terms). Player statistics are not redistributed in this repository; each user pulls their own.
+## Data sources and their terms
+
+This applies to the **data**, not the code, and matters if you deploy a public instance.
+
+- **Fixtures, groups and bracket** come from the [openfootball/worldcup.json](https://github.com/openfootball/worldcup.json) dataset, dedicated to the public domain (**CC0-1.0**), used and redistributable with no restrictions.
+- **Player squads and stats** come from [API-Football](https://www.api-football.com/), fetched at runtime with **your own API key** under [their terms](https://www.api-football.com/terms). This repository does **not** contain or redistribute any API-Football data: the on-disk cache and the key live only in your gitignored `.env.local` and `cache/`. Per their terms you may not resell the data, and API-Football does not itself grant a licence to publish it: if you host a public instance that displays the data, you are responsible for obtaining any necessary permission from the rights holders. The app runs without a key too (it falls back to the public fixtures and an Elo strength prior).
+- **Player names** shown in the UI are factual; the **ratings and probabilities** are this project's own computations derived from the stats, not the raw provider data.

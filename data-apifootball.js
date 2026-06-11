@@ -1,13 +1,14 @@
-// National-team Moneyball adapter on API-Football (free plan: seasons 2022-2024).
-// Current squads + per-player club-season form (2024/25). Scores are ABSOLUTE-scaled
-// (vs sensible per-90 caps) rather than percentiled, so they are stable even when only
-// a few teams are cached. The API's own match `rating` (0-10) is the backbone quality
-// signal. Same {attack,defense,technique,endurance,injury_risk,overall} 0-100 + team
-// rating interface as the club-data adapter, so the simulator/UI is source-agnostic.
+// National-team Moneyball adapter on API-Football. Current squads + per-player club-season
+// form for the season set by AF_SEASON (the free plan only covers older seasons; paid plans
+// reach the current one). Scores are ABSOLUTE-scaled (vs sensible per-90 caps) rather than
+// percentiled, so they are stable even when only a few teams are cached. The API's own
+// match `rating` (0-10) is the backbone quality signal. Same {attack,defense,technique,
+// endurance,injury_risk,overall} 0-100 + team rating interface as the club-data adapter,
+// so the simulator/UI is source-agnostic.
 import { afGet, afCached, budget, updateManifest, readManifest } from "./apifootball.js";
 export { readManifest };
 
-export const SEASON = Number(process.env.AF_SEASON) || 2024; // latest the free plan allows
+export const SEASON = Number(process.env.AF_SEASON) || 2023; // override via AF_SEASON (.env.local)
 const POSMAP = { Goalkeeper: "GK", Defender: "DEF", Midfielder: "MID", Attacker: "FWD" };
 const num = (x) => (x == null || x === "" ? 0 : Number(x)) || 0;
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));

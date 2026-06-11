@@ -104,11 +104,10 @@ app.get("/api/players-pool", async (_req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- Fixtures, groups, bracket (openfootball; refresh re-pulls latest scores) ---
+// --- Fixtures, groups, bracket (openfootball; ?refresh=1 FORCES a re-pull for live scores) ---
 app.get("/api/schedule", async (req, res) => {
   try {
-    if (req.query.refresh) await refresh();
-    else await refresh();
+    await refresh(!!req.query.refresh);
     res.json({ groups: getGroups(), schedule: getSchedule(), knockout: getKnockout(), cached: Object.keys(readManifest()) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

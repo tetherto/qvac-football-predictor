@@ -176,6 +176,20 @@
   .tfrow .tfbar{flex:1.1;height:9px;border-radius:999px;background:rgba(48,80,75,.45);overflow:hidden} .tfrow .tfbar span{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--gold))}
   .tfrow .tfpct{font-family:var(--mono);font-size:11.5px;min-width:44px;text-align:right;color:var(--bright)}
   .tfnote{font-size:11px;color:var(--dim);margin-top:8px}
+  /* schedule tab */
+  .schedhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  #schedList{max-height:660px;overflow-y:auto;padding-right:5px;position:relative}
+  .schedday{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--gold);margin:10px 0 4px;position:sticky;top:0;background:#0c1713;padding:4px 9px;border-radius:6px;border-left:3px solid var(--gold);text-transform:uppercase;z-index:2}
+  .schedday.istoday{background:linear-gradient(90deg,var(--gold),rgba(255,216,77,.2));color:#06120e;font-weight:700}
+  .schedrow{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:8px;font-size:12.5px}
+  .schedrow.clickable{cursor:pointer} .schedrow.clickable:hover{background:rgba(22,227,193,.08)}
+  .schedrow .st{font-family:var(--mono);font-size:9.5px;color:var(--dim);min-width:92px}
+  .schedrow .sa{flex:1;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .schedrow .sb{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .schedrow .ssc{font-family:var(--mono);font-weight:800;min-width:50px;text-align:center;color:var(--dim)}
+  .schedrow.played .ssc{color:var(--bright);background:rgba(22,227,193,.12);border-radius:6px;padding:1px 5px}
+  .schedrow .schip{font-family:var(--mono);font-size:9px;color:var(--dim);min-width:84px;text-align:right;white-space:nowrap}
+  .schedrow .sgo{font-family:var(--mono);font-size:9.5px;color:var(--accent);opacity:0;min-width:60px;text-align:right} .schedrow.clickable:hover .sgo{opacity:1}
+  .schedrow .tbd{color:var(--dim)}
 
   /* ---------- full-screen FX overlays ---------- */
   #fx{position:fixed;inset:0;z-index:60;pointer-events:none}
@@ -215,6 +229,7 @@
 
   <div class="tabs">
     <button id="tabMatches" data-tab="matches">⚽ Matches</button>
+    <button id="tabSched" data-tab="schedule">📅 Schedule</button>
     <button id="tabPredict" class="active" data-tab="predict">🔮 Predict a match</button>
     <button id="tabCup" data-tab="cup">🏆 Tournament sim</button>
   </div>
@@ -285,6 +300,18 @@
     </div>
   </div>
 
+  <!-- SCHEDULE -->
+  <div id="tab-schedule" hidden>
+    <div class="panel">
+      <div class="schedhead">
+        <h3 style="margin:0">📅 The real schedule <span class="muted">all 104 matches, scores land as they are played</span></h3>
+        <button class="go alt" id="refreshSched" data-label="↻ Refresh schedule" style="padding:7px 16px;font-size:12px">↻ Refresh schedule</button>
+      </div>
+      <div class="muted" id="schedNote" style="margin:5px 0 9px"></div>
+      <div id="schedList">Loading fixtures...</div>
+    </div>
+  </div>
+
   <!-- MATCHES -->
   <div id="tab-matches" hidden>
     <div class="panel" style="margin-bottom:12px">
@@ -292,7 +319,12 @@
       <div class="ggrid" id="groups">Loading...</div>
     </div>
     <div class="panel">
-      <h3>Build your bracket <span class="muted">tap a team to advance it</span> <button class="go alt" id="resetBracket" style="float:right;padding:4px 10px;font-size:11px">↺ reset</button></h3>
+      <h3>Build your bracket <span class="muted">tap a team to advance it</span>
+        <span style="float:right;display:flex;gap:8px">
+          <button class="go alt" id="refreshBracket" data-label="↻ Refresh data" style="padding:4px 10px;font-size:11px">↻ Refresh data</button>
+          <button class="go alt" id="resetBracket" style="padding:4px 10px;font-size:11px">↺ reset</button>
+        </span>
+      </h3>
       <div class="bracketwrap"><div class="bracket" id="bracket"></div></div>
     </div>
   </div>
@@ -312,7 +344,7 @@ const isTeam=(t)=>Object.prototype.hasOwnProperty.call(FLAGS,t);
 let SCHED=null,GROUPS=null,KNOCK=null,CACHED=new Set(),teamA="",teamB="",busy=false;
 const ACC="#16E3C1", AMB="#F0A24E", GLD="#FFD84D";
 
-const TAB_IDS=["predict","matches","cup"];
+const TAB_IDS=["predict","matches","cup","schedule"];
 document.querySelectorAll(".tabs button").forEach((b)=>b.addEventListener("click",()=>{
   document.querySelectorAll(".tabs button").forEach((x)=>x.classList.toggle("active",x===b));
   TAB_IDS.forEach((t)=>{ $("tab-"+t).hidden = b.dataset.tab!==t; });
@@ -388,8 +420,55 @@ async function loadSchedule(){
   const opts=all.map((t)=>`<option value="${esc(t)}">${flag(t)} ${esc(t)}</option>`).join("");
   $("selA").innerHTML=opts; $("selB").innerHTML=opts;
   const cd=all.filter((t)=>CACHED.has(t)); if(cd.length>=2){ $("selA").value=cd[0]; $("selB").value=cd[1]; }
-  renderGroups(); renderBracket();
+  renderGroups(); renderBracket(); renderSchedule(); schedNoteUpdate();
 }
+function schedNoteUpdate(prefix){
+  const played=(SCHED||[]).filter((m)=>Array.isArray(m.score)).length;
+  $("schedNote").textContent=`${prefix||""}${played} of ${(SCHED||[]).length} matches played. Tap any fixture with two known teams to predict it.`;
+}
+// The real fixture list, grouped by date. Live scores show once openfootball has them;
+// the refresh button force re-pulls the dataset (the tournament starts 11 June 2026).
+function renderSchedule(){
+  if(!SCHED||!SCHED.length){ $("schedList").innerHTML='<div class="muted">No fixtures loaded.</div>'; return; }
+  const today=new Date().toISOString().slice(0,10);
+  const fmt=(d)=>{ try{ return new Date(d+"T12:00:00Z").toLocaleDateString("en-GB",{weekday:"short",day:"numeric",month:"short"}).toUpperCase(); }catch(e){ return d; } };
+  // The source order interleaves groups, so sort by date (stable: original order within a day).
+  const ordered=[...SCHED].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  let h="",lastDate=null;
+  for(const m of ordered){
+    if(m.date!==lastDate){ lastDate=m.date; h+=`<div class="schedday ${m.date===today?'istoday':''}">${fmt(m.date)}${m.date===today?" &middot; TODAY":""}</div>`; }
+    const a=m.team_a,b=m.team_b, real=isTeam(a)&&isTeam(b), played=Array.isArray(m.score);
+    const side=(t,flagFirst)=> isTeam(t) ? (flagFirst?`${flag(t)} ${esc(t)}`:`${esc(t)} ${flag(t)}`) : `<span class="tbd">${esc(t)}</span>`;
+    h+=`<div class="schedrow ${real?'clickable':''} ${played?'played':''}" ${real?`data-a="${esc(a)}" data-b="${esc(b)}"`:""}>`+
+      `<span class="st">${esc(m.time||"")}</span>`+
+      `<span class="sa">${side(a,false)}</span>`+
+      `<span class="ssc">${played?`${m.score[0]} - ${m.score[1]}`:"v"}</span>`+
+      `<span class="sb">${side(b,true)}</span>`+
+      `<span class="schip">${esc(m.knockout?m.round:(m.group||""))}</span>`+
+      (real?'<span class="sgo">predict ▸</span>':'<span class="sgo"></span>')+
+    `</div>`;
+  }
+  $("schedList").innerHTML=h;
+  $("schedList").querySelectorAll(".schedrow.clickable").forEach((el)=>el.addEventListener("click",()=>pickAndPredict(el.dataset.a, el.dataset.b)));
+}
+// Force re-pull of fixtures + scores, then re-render schedule, groups and bracket.
+let refreshing=false;
+async function refreshData(){
+  if(refreshing)return; refreshing=true;
+  const btns=[$("refreshSched"),$("refreshBracket")];
+  btns.forEach((b)=>{ b.disabled=true; b.textContent="↻ refreshing..."; });
+  try{
+    const d=await fetch("/api/schedule?refresh=1").then((r)=>r.json());
+    if(d.error) throw new Error(d.error);
+    SCHED=d.schedule; GROUPS=d.groups; KNOCK=d.knockout; CACHED=new Set(d.cached||[]);
+    renderSchedule(); renderGroups(); renderBracket();
+    schedNoteUpdate(`Updated ${new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}. `);
+  }catch(e){ $("schedNote").textContent="Refresh failed: "+e.message; }
+  btns.forEach((b)=>{ b.disabled=false; b.textContent=b.dataset.label; });
+  refreshing=false;
+}
+$("refreshSched").addEventListener("click",refreshData);
+$("refreshBracket").addEventListener("click",refreshData);
 function renderGroups(){
   $("groups").innerHTML=Object.keys(GROUPS).sort().map((L)=>`<div class="gcard"><h4>Group ${L}</h4>${GROUPS[L].map((t,i)=>`<div class="gt" data-team="${esc(t)}"><span class="gp">${i+1}</span><span class="fl">${flag(t)}</span> ${esc(t)}</div>`).join("")}</div>`).join("");
   $("groups").querySelectorAll(".gt").forEach((el)=>el.addEventListener("click",()=>{ const t=el.dataset.team; const grp=Object.values(GROUPS).find((g)=>g.includes(t)); const opp=grp.find((x)=>x!==t); pickAndPredict(t,opp); }));

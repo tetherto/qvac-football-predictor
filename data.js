@@ -36,8 +36,8 @@ async function getJson(url) {
 
 const round2 = (x) => Math.round(x * 100) / 100;
 
-export async function refresh() {
-  if (cache.fixtures && Date.now() - cache.fetchedAt < TTL_MS) return;
+export async function refresh(force = false) {
+  if (!force && cache.fixtures && Date.now() - cache.fetchedAt < TTL_MS) return;
 
   const fixturesDoc = await getJson(`${RAW}/2026/worldcup.json`);
   const fixtures = matchesOf(fixturesDoc).map((m) => ({

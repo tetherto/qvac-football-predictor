@@ -111,6 +111,7 @@ function runOnce(groups, knockout, R, avg, detail) {
   const standings = simGroups(groups, R, avg);
   const thirdsByGroup = thirdsMap(standings);
   const W = {}, L = {}, reached = {}, matches = detail ? [] : null;
+  let finalists = null;
   const resolve = (slot) => slot[0] === "W" ? W[+slot.slice(1)] : slot[0] === "L" ? L[+slot.slice(1)] : slotTeam(slot, standings, thirdsByGroup);
   for (const m of knockout) {
     const isThird = m.round === "Match for third place";
@@ -118,11 +119,11 @@ function runOnce(groups, knockout, R, avg, detail) {
     if (!isThird) { const s = STAGE_IDX[m.round]; for (const t of [A, B]) if (t) reached[t] = Math.max(reached[t] || 0, s); }
     const res = koPlay(A, B, R, avg);
     W[m.num] = res.w; L[m.num] = res.l;
-    if (m.round === "Final" && res.w) reached[res.w] = 6;
+    if (m.round === "Final") { if (A && B) finalists = [A, B]; if (res.w) reached[res.w] = 6; }
     if (detail) matches.push({ num: m.num, round: m.round, a: A || m.a, b: B || m.b, score: res.score, winner: res.w, pens: res.pens });
   }
   const champion = W[104] || null;
-  if (!detail) return { champion, reached };
+  if (!detail) return { champion, reached, finalists };
   const standingsOut = {}; for (const [k, rows] of Object.entries(standings)) standingsOut[k] = rows.map((r) => ({ team: r.team, pts: r.pts, gd: r.gd, gf: r.gf }));
   return { champion, reached, standings: standingsOut, matches };
 }
@@ -190,18 +191,26 @@ function samplePlayByPlay(groups, knockout, R, avg, forceWinner) {
   return { matches, champion: W[104] || null };
 }
 
-// Fun facts mined from the aggregate runs: surprise champions, favourite fragility, spread.
-function computeFunFacts(stat, probs, runs, R) {
+// Fun facts mined from the aggregate runs: surprise champions, favourite fragility, the
+// final the sims keep producing, the dark horse, the toughest group. All numbers come
+// straight from the simulation tallies (the on-device LLM only rephrases them).
+function computeFunFacts(stat, probs, runs, R, groups, topFinals) {
   const elo = (t) => R[t]?.elo || 1820, pct = (x) => Math.round(x * 100), n = (x) => Math.round(x * runs);
   const facts = [], champs = probs.filter((p) => p.win > 0);
-  if (champs.length) facts.push(`${champs.length} different nations lifted the trophy across ${runs.toLocaleString()} simulations.`);
+  if (topFinals && topFinals[0]) { const f = topFinals[0]; facts.push(`The final the sims keep booking: ${f.a} v ${f.b}, seen ${f.n} times in ${runs.toLocaleString()} runs.`); }
+  if (champs.length) facts.push(`${champs.length} different nations lifted the trophy at least once across ${runs.toLocaleString()} simulations.`);
   const cinderella = [...champs].sort((a, b) => elo(a.team) - elo(b.team))[0];
   if (cinderella && n(cinderella.win) >= 1) facts.push(`Even ${cinderella.team} pulled it off: champions in ${n(cinderella.win)} of ${runs.toLocaleString()} runs. You never know.`);
   const fav = probs[0];
   if (fav) facts.push(`The favourite, ${fav.team}, still crashes out before the final ${pct(1 - fav.final)}% of the time.`);
-  const outsider = probs.filter((p) => p.sf > 0).sort((a, b) => elo(a.team) - elo(b.team))[0];
-  if (outsider && outsider.team !== cinderella?.team) facts.push(`${outsider.team} stormed into the semi-finals in ${n(outsider.sf)} runs, the biggest outsider to get that far.`);
-  return facts;
+  const rankByElo = [...probs].sort((a, b) => elo(b.team) - elo(a.team)).map((p) => p.team);
+  const darkHorse = probs.filter((p) => rankByElo.indexOf(p.team) >= 12).sort((a, b) => b.sf - a.sf)[0];
+  if (darkHorse && darkHorse.sf > 0.02) facts.push(`Dark horse: ${darkHorse.team}, outside the top twelve on paper, still reaches the semi-finals in ${pct(darkHorse.sf)}% of runs.`);
+  if (groups) {
+    const death = Object.entries(groups).map(([L, ts]) => ({ L, avg: ts.reduce((s, t) => s + elo(t), 0) / ts.length })).sort((a, b) => b.avg - a.avg)[0];
+    if (death) facts.push(`Group ${death.L} is the group of death: the strongest four-team average of the twelve groups.`);
+  }
+  return facts.slice(0, 6);
 }
 
 function blankStat(groups, R) {
@@ -216,14 +225,28 @@ function finalizeProbs(stat, n) {
     .sort((a, b) => b.win - a.win || b.final - a.final || b.sf - a.sf);
 }
 
-// Monte-Carlo the whole tournament (one shot). Returns reach probabilities + predicted bracket.
+// Monte-Carlo the whole tournament (one shot). Returns reach probabilities, the predicted
+// bracket, the play-by-play run, the most-seen finals, and computed fun facts.
 export async function simulateTournament(runs = 3000) {
   await refresh();
   const groups = getGroups(), knockout = getKnockout(), R = await buildRatings(), avg = 1.25;
   const stat = blankStat(groups, R);
-  for (let i = 0; i < runs; i++) tally(stat, runOnce(groups, knockout, R, avg, false).reached);
+  const finalCounts = {}; // "A|B" (sorted) -> { n, wins: { team: count } }
+  for (let i = 0; i < runs; i++) {
+    const r = runOnce(groups, knockout, R, avg, false);
+    tally(stat, r.reached);
+    if (r.finalists) {
+      const key = [...r.finalists].sort().join("|");
+      const fc = finalCounts[key] || (finalCounts[key] = { n: 0, wins: {} });
+      fc.n++; if (r.champion) fc.wins[r.champion] = (fc.wins[r.champion] || 0) + 1;
+    }
+  }
   const probs = finalizeProbs(stat, runs);
-  return { runs, probs, bracket: expectedBracket(groups, knockout, R, avg), playByPlay: samplePlayByPlay(groups, knockout, R, avg, probs[0]?.team), funFacts: computeFunFacts(stat, probs, runs, R) };
+  const topFinals = Object.entries(finalCounts).sort((x, y) => y[1].n - x[1].n).slice(0, 6).map(([key, v]) => {
+    const [a, b] = key.split("|");
+    return { a, b, n: v.n, pct: Math.round((v.n / runs) * 1000) / 10, winsA: v.wins[a] || 0, winsB: v.wins[b] || 0 };
+  });
+  return { runs, probs, bracket: expectedBracket(groups, knockout, R, avg), playByPlay: samplePlayByPlay(groups, knockout, R, avg, probs[0]?.team), topFinals, funFacts: computeFunFacts(stat, probs, runs, R, groups, topFinals) };
 }
 
 // Streamed version: runs in chunks and calls onChunk({done,total,probs,lastChampion}) as the
@@ -243,5 +266,5 @@ export async function simulateTournamentStream(runs, onChunk, chunkSize = 100, o
     if (onChunk) await onChunk({ done, total: runs, probs: finalizeProbs(stat, done), lastChampion });
   }
   const probs = finalizeProbs(stat, runs);
-  return { runs, probs, bracket: expectedBracket(groups, knockout, R, avg), funFacts: computeFunFacts(stat, probs, runs, R) };
+  return { runs, probs, bracket: expectedBracket(groups, knockout, R, avg), funFacts: computeFunFacts(stat, probs, runs, R, groups, null) };
 }

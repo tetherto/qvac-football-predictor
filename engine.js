@@ -151,6 +151,26 @@ export async function predictNations({ modelId, teamA, teamB, onEvent, tone }) {
   return { ok: true };
 }
 
+// Rewrite the tournament fun facts with personality, fully on-device. One-shot completion
+// (kvCache off: a named cache would leak state across calls). Every number in each output
+// line is validated against ITS source fact; if the small model invents or mangles one,
+// the caller falls back to the plain computed facts.
+export async function funFactsRewrite({ modelId, facts }) {
+  const sys = `You punch up football tournament facts for a broadcast graphics card. Rewrite each fact as one fun, confident, slightly cheeky line. Keep EVERY number and every team name EXACTLY as given. Same order, one line per fact, no new facts, no hashtags, no emoji. Answer with ONLY a JSON array of strings.
+Example input: ["Spain won 510 of 5,000 simulations."]
+Example answer: ["Spain lifted the trophy in 510 of 5,000 universes. Book the parade?"]`;
+  const history = [{ role: "system", content: sys }, { role: "user", content: JSON.stringify(facts) }];
+  const noopTool = [{ name: "noop", description: "Do not call this. Internal placeholder only.", parameters: z.object({}) }];
+  const r = await turn({ modelId, history, kvCache: false, onEvent: null, tools: noopTool });
+  const m = (r.content || "").match(/\[[\s\S]*\]/);
+  if (!m) return null;
+  let arr; try { arr = JSON.parse(m[0]); } catch { return null; }
+  if (!Array.isArray(arr) || arr.length !== facts.length || !arr.every((s) => typeof s === "string" && s.trim())) return null;
+  const nums = (s) => (String(s).match(/\d[\d,.]*/g) || []).map((x) => x.replace(/[.,]+$/, ""));
+  for (let i = 0; i < arr.length; i++) { const src = new Set(nums(facts[i])); if (!nums(arr[i]).every((n) => src.has(n))) return null; }
+  return arr.map((s) => s.replace(/[—–]/g, ", ").trim());
+}
+
 // Run the full prediction loop for one fixture. `onEvent` may be async (server paces/streams).
 export async function predict({ modelId, teamA, teamB, onEvent }) {
   await refresh();

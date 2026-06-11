@@ -3,7 +3,7 @@ import express from "express";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { predict, predictNations, loadPredictor, unloadModel, LLM } from "./engine.js";
+import { predict, predictNations, loadPredictor, unloadModel, funFactsRewrite, LLM } from "./engine.js";
 import { refresh, getFixtures, ratingFor, getLeagueAvg, allTeams, isPlaceholderTeam } from "./data.js";
 import { simulateMatch } from "./simulate.js";
 import { squadScored, teamRecap, teamDescription, teamRating, readManifest } from "./data-apifootball.js";
@@ -115,11 +115,23 @@ app.get("/api/schedule", async (req, res) => {
 
 // --- Simulate the whole tournament (Monte Carlo) -> one consistent result: per-team odds, the
 // PREDICTED tournament played match-by-match (most-likely champion wins it, favourites advance),
-// and fun facts mined from the runs. The UI paces the reveal. ---
+// the most-seen finals, and fun facts mined from the runs. The UI paces the reveal. ---
 app.get("/api/simulate-tournament", async (req, res) => {
   const runs = Math.min(10000, Math.max(500, Number(req.query.runs) || 5000));
   try { res.json(await simulateTournament(runs)); }
   catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- Rephrase the computed fun facts with the LOCAL LLM (numbers validated host-side; falls
+// back to null so the UI keeps the plain computed facts if the model mangles anything). ---
+app.post("/api/cup-facts", async (req, res) => {
+  try {
+    const facts = Array.isArray(req.body?.facts) ? req.body.facts.map(String).slice(0, 8) : [];
+    if (!facts.length) return res.status(400).json({ error: "facts required" });
+    const modelId = await ensureModel();
+    const out = await funFactsRewrite({ modelId, facts });
+    res.json({ facts: out || null, ai: !!out });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 async function shutdown() { if (state.modelId) await unloadModel({ modelId: state.modelId, clearStorage: false }).catch(() => {}); process.exit(0); }

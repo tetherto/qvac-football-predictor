@@ -71,7 +71,7 @@ The code is licensed under **Apache 2.0**. See [LICENSE](LICENSE).
 
 ## Data sources and their terms
 
-This applies to the **data**, not the code, and matters if you deploy a public instance.
+This applies to the **data**, not the code.
 
 - **Fixtures, groups and bracket** come from the [openfootball/worldcup.json](https://github.com/openfootball/worldcup.json) dataset, dedicated to the public domain (**CC0-1.0**), used and redistributable with no restrictions.
 - **Player squads and stats** come from [API-Football](https://www.api-football.com/), fetched at runtime with **your own API key** under [their terms](https://www.api-football.com/terms). This repository does **not** contain or redistribute any API-Football data: the on-disk cache and the key live only in your gitignored `.env.local` and `cache/`. Per their terms you may not resell the data, and API-Football does not itself grant a licence to publish it: if you host a public instance that displays the data, you are responsible for obtaining any necessary permission from the rights holders. The app runs without a key too (it falls back to the public fixtures and an Elo strength prior).
